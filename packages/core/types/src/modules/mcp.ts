@@ -283,6 +283,17 @@ export interface McpResourceBuilder {
   ): McpResourceDefinitionFields<Name> & McpAuthAccess;
 }
 
+/**
+ * A middleware attachable to the MCP HTTP route via
+ * {@link McpService.registerMiddleware}. Accepts the same forms as a Strapi
+ * route's `config.middlewares`: a UID string, an inline handler, or a
+ * `{ name, config }` object.
+ */
+export type McpMiddleware =
+  | Core.MiddlewareName
+  | Core.MiddlewareConfig
+  | Core.MiddlewareHandler;
+
 export type McpServiceStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
 
 /**

@@ -33,6 +33,7 @@ describe('MCP Routes', () => {
           handler: expect.any(Function),
           config: {
             auth: false,
+            middlewares: [],
           },
         },
         {
@@ -143,6 +144,43 @@ describe('MCP Routes', () => {
           r.path === '/register'
       );
       expect(oauthPaths).toHaveLength(0);
+    });
+
+    describe('middlewares', () => {
+      test('POST route carries an empty middlewares array by default', () => {
+        const routes = createMcpRoutes(mockConfig, mockHandlers);
+        const post = routes.find((route) => route.method === 'POST');
+
+        expect(post?.config).toStrictEqual({ auth: false, middlewares: [] });
+      });
+
+      test('attaches middlewares to the POST route in registration order', () => {
+        const first = jest.fn(async (_ctx: any, next: any) => next());
+        const second = jest.fn(async (_ctx: any, next: any) => next());
+
+        const routes = createMcpRoutes(mockConfig, mockHandlers, [
+          'global::rate-limit',
+          first,
+          { name: 'global::ip-filter', config: { allow: ['127.0.0.1'] } },
+          second,
+        ]);
+        const post = routes.find((route) => route.method === 'POST');
+
+        expect(post?.config?.middlewares).toStrictEqual([
+          'global::rate-limit',
+          first,
+          { name: 'global::ip-filter', config: { allow: ['127.0.0.1'] } },
+          second,
+        ]);
+      });
+
+      test('does not attach middlewares to the method-not-allowed routes', () => {
+        const routes = createMcpRoutes(mockConfig, mockHandlers, ['global::rate-limit']);
+
+        for (const route of routes.filter((r) => r.method !== 'POST')) {
+          expect(route.config).toStrictEqual({ auth: false });
+        }
+      });
     });
   });
 

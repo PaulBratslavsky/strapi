@@ -1,6 +1,6 @@
 import type { z } from 'zod/v4';
 import type { LiteralUnion } from '../utils/string';
-import type { MiddlewareHandler } from './middleware';
+import type { MiddlewareConfig, MiddlewareHandler, MiddlewareName } from './middleware';
 
 export type RouteInfo = {
   apiName?: string;
@@ -10,7 +10,9 @@ export type RouteInfo = {
 
 export type RouteConfig = {
   prefix?: string;
-  middlewares?: Array<string | MiddlewareHandler>;
+  // `resolveMiddlewares` has always accepted the object form at runtime; the
+  // type lagged behind it.
+  middlewares?: Array<MiddlewareName | MiddlewareConfig | MiddlewareHandler>;
   policies?: Array<string | { name: string; config: unknown }>;
   auth?: false | { scope?: string[]; strategies?: string[] };
 };
