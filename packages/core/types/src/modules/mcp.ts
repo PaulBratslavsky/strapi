@@ -289,10 +289,7 @@ export interface McpResourceBuilder {
  * route's `config.middlewares`: a UID string, an inline handler, or a
  * `{ name, config }` object.
  */
-export type McpMiddleware =
-  | Core.MiddlewareName
-  | Core.MiddlewareConfig
-  | Core.MiddlewareHandler;
+export type McpMiddleware = Core.MiddlewareName | Core.MiddlewareConfig | Core.MiddlewareHandler;
 
 export type McpServiceStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
 
@@ -376,6 +373,25 @@ export interface McpService {
   registerResource<Name extends string>(
     resource: McpResourceDefinitionFields<Name> & McpAuthAccess
   ): void;
+
+  /**
+   * Attach a middleware to the MCP HTTP route (POST /mcp). It runs before the
+   * MCP request handler, in registration order.
+   *
+   * Must be called while strapi.ai.mcp is idle, before strapi.ai.mcp.start() runs.
+   * In Strapi's load lifecycle, call only from the register phase (plugin register() or app register()).
+   * @throws Error if called after the MCP server has started
+   */
+  registerMiddleware(middleware: McpMiddleware): void;
+
+  /**
+   * Attach several middlewares to the MCP HTTP route (POST /mcp), in array order.
+   * Equivalent to calling {@link McpService.registerMiddleware} for each entry.
+   *
+   * Must be called while strapi.ai.mcp is idle, before strapi.ai.mcp.start() runs.
+   * @throws Error if called after the MCP server has started
+   */
+  registerMiddlewares(middlewares: McpMiddleware[]): void;
 
   /**
    * Start the MCP server
