@@ -25,7 +25,7 @@ Source: `packages/core/core/src/services/mcp/`, `packages/core/core/src/provider
 | Extensibility    | Any plugin or app can register tools/prompts/resources via `strapi.ai.mcp.register*` during the register phase |
 | Route middleware | `strapi.ai.mcp.registerMiddleware(...)` during the register phase — attaches to `POST /mcp` only               |
 | Built-in         | One dev-only `log` tool (core) + one CRUD tool set per displayed content type (content-manager)                |
-| SDK              | `@modelcontextprotocol/sdk@1.29.0`                                                                             |
+| SDK              | `@modelcontextprotocol/sdk@1.30.0`                                                                             |
 
 ## Architecture
 
@@ -116,7 +116,10 @@ Strapi's normal route pipeline, so all three forms behave exactly as they do on 
 It runs **before** the MCP request handler, in registration order.
 
 The `GET`/`PUT`/`PATCH`/`DELETE` method-not-allowed routes are deliberately left bare — they
-exist only to return a parseable JSON-RPC error.
+exist only to return a parseable JSON-RPC error, and are not covered by registered middleware —
+rate limits and IP filters apply to `POST` only.
+
+Route-level `policies` support is deliberately deferred for the MCP route — see `services/mcp/routes.ts`.
 
 :::caution
 Like `registerTool`, these throw once `strapi.ai.mcp` has left the `idle` status. Register from a

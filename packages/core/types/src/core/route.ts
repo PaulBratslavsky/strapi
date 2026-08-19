@@ -12,7 +12,9 @@ export type RouteConfig = {
   prefix?: string;
   // `resolveMiddlewares` has always accepted the object form at runtime; the
   // type lagged behind it.
-  middlewares?: Array<MiddlewareName | MiddlewareConfig | MiddlewareHandler>;
+  middlewares?: Array<
+    MiddlewareName | (MiddlewareConfig & { name: MiddlewareName }) | MiddlewareHandler
+  >;
   policies?: Array<string | { name: string; config: unknown }>;
   auth?: false | { scope?: string[]; strategies?: string[] };
 };

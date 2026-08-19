@@ -289,7 +289,10 @@ export interface McpResourceBuilder {
  * route's `config.middlewares`: a UID string, an inline handler, or a
  * `{ name, config }` object.
  */
-export type McpMiddleware = Core.MiddlewareName | Core.MiddlewareConfig | Core.MiddlewareHandler;
+export type McpMiddleware =
+  | Core.MiddlewareName
+  | (Core.MiddlewareConfig & { name: Core.MiddlewareName })
+  | Core.MiddlewareHandler;
 
 export type McpServiceStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
 
@@ -297,8 +300,9 @@ export type McpServiceStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'e
  * Service providing Model Context Protocol (MCP) capabilities.
  * Available on strapi.ai.mcp.
  *
- * Call `registerTool`, `registerPrompt`, and `registerResource` only during
- * Strapi's register phase. The MCP HTTP server starts during bootstrap.
+ * Call `registerTool`, `registerPrompt`, `registerResource`, and
+ * `registerMiddleware` only during Strapi's register phase. The MCP HTTP
+ * server starts during bootstrap.
  */
 export interface McpService {
   /**

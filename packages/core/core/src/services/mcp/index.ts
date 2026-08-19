@@ -120,8 +120,17 @@ export const createMcpService = (strapi: Core.Strapi): Modules.MCP.McpService =>
 
       strapi.server.use(createOAuthDiscoveryFallbackMiddleware());
 
-      const routes = createMcpRoutes(config, { handlePost }, routeMiddlewares);
-      strapi.server.routes(routes);
+      try {
+        const routes = createMcpRoutes(config, { handlePost }, [...routeMiddlewares]);
+        strapi.server.routes(routes);
+      } catch (error) {
+        serverStatus = 'error';
+        throw new Error(
+          `[MCP] Failed to register MCP routes — check middlewares passed to registerMiddleware(): ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
 
       serverStatus = 'running';
 

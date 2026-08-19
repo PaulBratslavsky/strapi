@@ -27,6 +27,8 @@ export type McpRouteHandlers = {
  * should not run user code. Resolution of each entry (UID string, inline
  * handler, or `{ name, config }`) is left to Strapi's route pipeline.
  *
+ * // TODO: policies support on the MCP route is deferred.
+ *
  * @internal
  */
 export const createMcpRoutes = (

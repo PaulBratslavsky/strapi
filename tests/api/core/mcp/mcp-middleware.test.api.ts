@@ -84,8 +84,66 @@ describe('MCP route middleware (api)', () => {
   });
 
   test('does not run registered middleware on unrelated routes', async () => {
-    await createAgent(strapi)({ url: '/_health', method: 'GET' });
+    // /_health is registered directly on the router and never passes through
+    // composeEndpoint, so it wouldn't prove anything about route middleware.
+    // /admin/init does go through the normal route pipeline.
+    await createAgent(strapi)({ url: '/admin/init', method: 'GET' });
 
     expect(calls).toStrictEqual([]);
+  });
+});
+
+describe('MCP route middleware (api) — blocking middleware', () => {
+  let strapi: Core.Strapi;
+
+  beforeAll(async () => {
+    strapi = await createStrapiInstance({
+      register({ strapi: instance }) {
+        instance.config.set('features.future.adminTokens', true);
+        instance.config.set('server.mcp.enabled', true);
+
+        // A gate middleware that declines the request outright: it sets its
+        // own status/body and never calls `next()`. This proves a middleware
+        // can actually block the request, not just observe it — the whole
+        // point of exposing registerMiddleware (rate limiting, IP filtering).
+        instance.ai.mcp.registerMiddleware(async (ctx: any) => {
+          ctx.status = 429;
+          ctx.body = { blocked: true, reason: 'rate-limited-by-test-gate' };
+          // Deliberately no call to next(): handlePost must never run.
+        });
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await strapi.destroy();
+  });
+
+  test('a middleware that does not call next() blocks the request before the handler runs', async () => {
+    const res = await createAgent(strapi)({
+      url: '/mcp',
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+      },
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: MCP_PROTOCOL_VERSION,
+          capabilities: {},
+          clientInfo: { name: 'mcp-middleware-test', version: '1.0.0' },
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(429);
+    // The gate middleware's own body, not handlePost's JSON-RPC
+    // AUTHENTICATION_REQUIRED envelope — proof handlePost never ran.
+    expect(res.body).toStrictEqual({ blocked: true, reason: 'rate-limited-by-test-gate' });
+    expect(res.body).not.toHaveProperty('jsonrpc');
+    expect(res.body).not.toHaveProperty('error');
   });
 });

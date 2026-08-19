@@ -254,6 +254,26 @@ describe('MCP Service Integration', () => {
       // Try to start again without stopping
       await expect(service.start()).rejects.toThrow('[MCP] Server already started or starting');
     });
+
+    test('should leave the service not-running and surface a clear error when route registration fails', async () => {
+      mockServerRoutes.mockImplementation(() => {
+        throw new Error('Middleware global::rate-limt not found.');
+      });
+
+      const service = createMcpService(mockStrapi as Core.Strapi);
+
+      await expect(service.start()).rejects.toThrow(
+        '[MCP] Failed to register MCP routes — check middlewares passed to registerMiddleware(): Middleware global::rate-limt not found.'
+      );
+
+      expect(service.isRunning()).toBe(false);
+
+      // The error status is sticky: a second start() attempt is rejected too,
+      // not silently retried, since serverStatus is now 'error' not 'starting'.
+      await expect(service.start()).rejects.toThrow(
+        '[MCP] Cannot start server: previous error state'
+      );
+    });
   });
 
   describe('middleware registration', () => {
