@@ -31,6 +31,7 @@ describe('MCP route middleware (api)', () => {
             calls.push(`inline:${ctx.method} ${ctx.path} respond=${ctx.respond !== false}`);
             await next();
           },
+          UID_MIDDLEWARE,
           { name: UID_MIDDLEWARE, config: { marker: 'configured' } },
         ]);
       },
@@ -72,7 +73,7 @@ describe('MCP route middleware (api)', () => {
     });
 
     expect(res.statusCode).toBe(401);
-    expect(calls).toStrictEqual(['inline:POST /mcp respond=true', 'uid:configured']);
+    expect(calls).toStrictEqual(['inline:POST /mcp respond=true', 'uid:none', 'uid:configured']);
   });
 
   test('does not run registered middleware on the method-not-allowed routes', async () => {
