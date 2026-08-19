@@ -15,16 +15,17 @@ Source: `packages/core/core/src/services/mcp/`, `packages/core/core/src/provider
 
 ## Summary
 
-| Concern       | Answer                                                                                                         |
-| ------------- | -------------------------------------------------------------------------------------------------------------- |
-| Enable        | `server.mcp.enabled` (default `false`)                                                                         |
-| Endpoint      | `POST /mcp` (fixed path, not configurable)                                                                     |
-| Transport     | MCP SDK `StreamableHTTPServerTransport`, stateless (one server instance per request)                           |
-| Auth          | Admin API token (`Authorization: Bearer <token>`) — same store as Settings → API Tokens (admin)                |
-| Authorization | Two layers: coarse session capability gate (CASL ability vs `auth.policies`) + fine-grained handler checks     |
-| Extensibility | Any plugin or app can register tools/prompts/resources via `strapi.ai.mcp.register*` during the register phase |
-| Built-in      | One dev-only `log` tool (core) + one CRUD tool set per displayed content type (content-manager)                |
-| SDK           | `@modelcontextprotocol/sdk@1.29.0`                                                                             |
+| Concern          | Answer                                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| Enable           | `server.mcp.enabled` (default `false`)                                                                         |
+| Endpoint         | `POST /mcp` (fixed path, not configurable)                                                                     |
+| Transport        | MCP SDK `StreamableHTTPServerTransport`, stateless (one server instance per request)                           |
+| Auth             | Admin API token (`Authorization: Bearer <token>`) — same store as Settings → API Tokens (admin)                |
+| Authorization    | Two layers: coarse session capability gate (CASL ability vs `auth.policies`) + fine-grained handler checks     |
+| Extensibility    | Any plugin or app can register tools/prompts/resources via `strapi.ai.mcp.register*` during the register phase |
+| Route middleware | `strapi.ai.mcp.registerMiddleware(...)` during the register phase — attaches to `POST /mcp` only               |
+| Built-in         | One dev-only `log` tool (core) + one CRUD tool set per displayed content type (content-manager)                |
+| SDK              | `@modelcontextprotocol/sdk@1.30.0`                                                                             |
 
 ## Architecture
 
@@ -83,6 +84,55 @@ All five routes set `config: { auth: false }` — Strapi's own admin/content-API
 The transport is the MCP SDK's `StreamableHTTPServerTransport` with `sessionIdGenerator: undefined`, i.e. **stateless**: a fresh `McpServer` instance is created and connected for every POST request, then closed in a `finally` block (`packages/core/core/src/services/mcp/handlers/handlePost.ts`).
 
 An OAuth discovery fallback middleware (`middleware/oauthDiscoveryFallback.ts`) intercepts `/.well-known/oauth-*` and `/register` with a plain JSON 404, since some MCP clients probe these paths and would otherwise hit Strapi's default HTML 404 page.
+
+## Route middleware
+
+`/mcp` is a public HTTP surface with `auth: false` at the router level, so it is a natural place
+for the protections you already apply elsewhere — rate limiting, IP filtering, request logging.
+Attach them with `registerMiddleware`, from the same register phase used for capabilities:
+
+```ts
+// src/index.ts, or a plugin's register()
+register({ strapi }) {
+  // inline handler
+  strapi.ai.mcp.registerMiddleware(async (ctx, next) => {
+    strapi.log.info(`[mcp] ${ctx.method} from ${ctx.ip}`);
+    await next();
+  });
+
+  // by UID
+  strapi.ai.mcp.registerMiddleware('global::rate-limit');
+
+  // by UID, with config
+  strapi.ai.mcp.registerMiddleware({ name: 'global::rate-limit', config: { max: 100 } });
+
+  // batch — runs in array order
+  strapi.ai.mcp.registerMiddlewares(['global::rate-limit', async (ctx, next) => next()]);
+}
+```
+
+Registered middleware is attached to the POST route's `config.middlewares` and resolved by
+Strapi's normal route pipeline, so all three forms behave exactly as they do on any other route.
+It runs **before** the MCP request handler, in registration order.
+
+The `GET`/`PUT`/`PATCH`/`DELETE` method-not-allowed routes are deliberately left bare — they
+exist only to return a parseable JSON-RPC error, and are not covered by registered middleware —
+rate limits and IP filters apply to `POST` only.
+
+Route-level `policies` support is deliberately deferred for the MCP route — see `services/mcp/routes.ts`.
+
+:::caution
+Like `registerTool`, these throw once `strapi.ai.mcp` has left the `idle` status. Register from a
+plugin's `register()` (preferred) or `bootstrap()`; app-level `bootstrap()` is too late.
+:::
+
+:::caution
+`handlePost` sets `ctx.respond = false` and the MCP SDK writes directly to the raw
+`ServerResponse`. A middleware that inspects the response _after_ `await next()` will therefore
+find `ctx.body` empty and `ctx.status` unset — the response has already gone to the socket.
+Middleware that only gates or observes the **request** works normally; middleware that needs to
+read or rewrite the response must wrap `ctx.res.write` / `ctx.res.end` itself.
+:::
 
 ## Authentication
 

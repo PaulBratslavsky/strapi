@@ -254,5 +254,115 @@ describe('MCP Service Integration', () => {
       // Try to start again without stopping
       await expect(service.start()).rejects.toThrow('[MCP] Server already started or starting');
     });
+
+    test('should leave the service not-running and surface a clear error when route registration fails', async () => {
+      mockServerRoutes.mockImplementation(() => {
+        throw new Error('Middleware global::rate-limt not found.');
+      });
+
+      const service = createMcpService(mockStrapi as Core.Strapi);
+
+      await expect(service.start()).rejects.toThrow(
+        '[MCP] Failed to register MCP routes — check middlewares passed to registerMiddleware(): Middleware global::rate-limt not found.'
+      );
+
+      expect(service.isRunning()).toBe(false);
+
+      // The error status is sticky: a second start() attempt is rejected too,
+      // not silently retried, since serverStatus is now 'error' not 'starting'.
+      await expect(service.start()).rejects.toThrow(
+        '[MCP] Cannot start server: previous error state'
+      );
+    });
+  });
+
+  describe('middleware registration', () => {
+    const getPostRoute = () => {
+      const routes = mockServerRoutes.mock.calls[0][0];
+      return routes.find((route: any) => route.method === 'POST');
+    };
+
+    test('registers an inline handler onto the POST route', async () => {
+      const service = createMcpService(mockStrapi as Core.Strapi);
+      const handler = jest.fn(async (_ctx: any, next: any) => next());
+
+      service.registerMiddleware(handler);
+      await service.start();
+
+      expect(getPostRoute().config.middlewares).toStrictEqual([handler]);
+    });
+
+    test('registers a middleware UID string', async () => {
+      const service = createMcpService(mockStrapi as Core.Strapi);
+
+      service.registerMiddleware('global::rate-limit');
+      await service.start();
+
+      expect(getPostRoute().config.middlewares).toStrictEqual(['global::rate-limit']);
+    });
+
+    test('registers the { name, config } object form', async () => {
+      const service = createMcpService(mockStrapi as Core.Strapi);
+
+      service.registerMiddleware({ name: 'global::rate-limit', config: { max: 100 } });
+      await service.start();
+
+      expect(getPostRoute().config.middlewares).toStrictEqual([
+        { name: 'global::rate-limit', config: { max: 100 } },
+      ]);
+    });
+
+    test('registerMiddlewares appends a batch, preserving order', async () => {
+      const service = createMcpService(mockStrapi as Core.Strapi);
+      const inline = jest.fn(async (_ctx: any, next: any) => next());
+
+      service.registerMiddleware('global::first');
+      service.registerMiddlewares(['global::second', inline]);
+      await service.start();
+
+      expect(getPostRoute().config.middlewares).toStrictEqual([
+        'global::first',
+        'global::second',
+        inline,
+      ]);
+    });
+
+    test('leaves the POST middlewares empty when none are registered', async () => {
+      const service = createMcpService(mockStrapi as Core.Strapi);
+
+      await service.start();
+
+      expect(getPostRoute().config.middlewares).toStrictEqual([]);
+    });
+
+    test('throws when registerMiddleware is called after start', async () => {
+      const service = createMcpService(mockStrapi as Core.Strapi);
+      await service.start();
+
+      expect(() => service.registerMiddleware('global::rate-limit')).toThrow(
+        '[MCP] Cannot register middlewares after the MCP server has started.'
+      );
+    });
+
+    test('throws when registerMiddlewares is called after start', async () => {
+      const service = createMcpService(mockStrapi as Core.Strapi);
+      await service.start();
+
+      expect(() => service.registerMiddlewares(['global::rate-limit'])).toThrow(
+        '[MCP] Cannot register middlewares after the MCP server has started.'
+      );
+    });
+
+    test('does not attach middlewares to the method-not-allowed routes', async () => {
+      const service = createMcpService(mockStrapi as Core.Strapi);
+
+      service.registerMiddleware('global::rate-limit');
+      await service.start();
+
+      const routes = mockServerRoutes.mock.calls[0][0];
+      for (const route of routes.filter((r: any) => r.method !== 'POST')) {
+        expect(route.config).toStrictEqual({ auth: false });
+      }
+    });
   });
 });

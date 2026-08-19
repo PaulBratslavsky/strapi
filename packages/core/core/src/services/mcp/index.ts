@@ -38,6 +38,10 @@ export const createMcpService = (strapi: Core.Strapi): Modules.MCP.McpService =>
     Modules.MCP.McpResourceDefinition
   >('resource');
 
+  // Middlewares attached to POST /mcp, in registration order. Resolution of
+  // each entry is left to Strapi's route pipeline at start().
+  const routeMiddlewares: Modules.MCP.McpMiddleware[] = [];
+
   // Prepare handler dependencies
   const handlerDependencies: McpHandlerDependencies = {
     strapi,
@@ -85,6 +89,22 @@ export const createMcpService = (strapi: Core.Strapi): Modules.MCP.McpService =>
       resourceDefinitions.define(resource);
     },
 
+    registerMiddleware(middleware) {
+      if (serverStatus !== 'idle') {
+        throw new Error('[MCP] Cannot register middlewares after the MCP server has started.');
+      }
+
+      routeMiddlewares.push(middleware);
+    },
+
+    registerMiddlewares(middlewares) {
+      if (serverStatus !== 'idle') {
+        throw new Error('[MCP] Cannot register middlewares after the MCP server has started.');
+      }
+
+      routeMiddlewares.push(...middlewares);
+    },
+
     async start() {
       if (service.isEnabled() === false) {
         strapi.log.debug('[MCP] Server is disabled');
@@ -100,8 +120,17 @@ export const createMcpService = (strapi: Core.Strapi): Modules.MCP.McpService =>
 
       strapi.server.use(createOAuthDiscoveryFallbackMiddleware());
 
-      const routes = createMcpRoutes(config, { handlePost });
-      strapi.server.routes(routes);
+      try {
+        const routes = createMcpRoutes(config, { handlePost }, [...routeMiddlewares]);
+        strapi.server.routes(routes);
+      } catch (error) {
+        serverStatus = 'error';
+        throw new Error(
+          `[MCP] Failed to register MCP routes — check middlewares passed to registerMiddleware(): ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
 
       serverStatus = 'running';
 

@@ -1,4 +1,4 @@
-import type { Core } from '@strapi/types';
+import type { Core, Modules } from '@strapi/types';
 import { McpConfiguration } from './internal/McpConfiguration';
 import { sendJsonRpcError } from './utils/sendJsonRpcError';
 
@@ -21,16 +21,30 @@ export type McpRouteHandlers = {
 
 /**
  * Creates MCP route definitions for registration with Strapi server.
+ *
+ * Caller-supplied middlewares are attached to the POST route only — the
+ * method-not-allowed routes exist to return a parseable JSON-RPC error and
+ * should not run user code. Resolution of each entry (UID string, inline
+ * handler, or `{ name, config }`) is left to Strapi's route pipeline.
+ *
+ * // TODO: policies support on the MCP route is deferred.
+ *
  * @internal
  */
 export const createMcpRoutes = (
   config: McpConfiguration,
-  handlers: McpRouteHandlers
+  handlers: McpRouteHandlers,
+  middlewares: Modules.MCP.McpMiddleware[] = []
 ): Omit<Core.Route, 'info'>[] => {
   const noAuth = { auth: false } as const;
 
   return [
-    { method: 'POST', path: config.path, handler: handlers.handlePost, config: noAuth },
+    {
+      method: 'POST',
+      path: config.path,
+      handler: handlers.handlePost,
+      config: { ...noAuth, middlewares },
+    },
     { method: 'GET', path: config.path, handler: handleMethodNotAllowed, config: noAuth },
     { method: 'DELETE', path: config.path, handler: handleMethodNotAllowed, config: noAuth },
     { method: 'PUT', path: config.path, handler: handleMethodNotAllowed, config: noAuth },
